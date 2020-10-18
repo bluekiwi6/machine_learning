@@ -1,13 +1,20 @@
+import joblib
 import matplotlib.pyplot as plt
 import os
 from pathlib import Path
 import seaborn as sns
 import sqlite3
+from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import train_test_split
+from sklearn.model_selection import GridSearchCV
 import pandas as pd
+import warnings
+
+warnings.filterwarnings('ignore', category=FutureWarning)
+warnings.filterwarnings('ignore', category=DeprecationWarning)
 
 
-def get_age_group_counts(df: pd.DataFrame):
+def get_age_group_counts(df: pd.DataFrame) -> pd.DataFrame:
     '''Group passenger data by age.
 
     Parameters:
@@ -39,7 +46,7 @@ def get_age_group_counts(df: pd.DataFrame):
     return full
 
 
-def show_relationships(df: pd.DataFrame, pass_vars: list) -> pd.DataFrame:
+def show_relationships(df: pd.DataFrame, pass_vars: list):
     '''Show if variable is correlated with survival.
 
     Parameters:
@@ -103,13 +110,11 @@ def prep_for_ml(df: pd.DataFrame) -> pd.DataFrame:
         .fillna({'deck': 'U'})
         .replace({
             'sex': {'male': 0, 'female': 1},
-            'class': {'First': 1, 'Second': 2, 'Third': 3},
         })
         .assign(
             family_count=df.sibsp + df.parch
         )
-        .filter(['survived', 'pclass', 'sex', 'age', 'family_count', 'fare',
-                 'embarked', 'class', 'adult_male', 'deck', 'alone'])
+        .filter(['survived', 'pclass', 'sex', 'age', 'family_count', 'fare'])
     )
     return df
 
@@ -134,6 +139,8 @@ def split_train_val_test(df: pd.DataFrame) -> dict:
     x_val, x_test, y_val, y_test = train_test_split(
         x_test, y_test, test_size=0.5, random_state=42)
     ml_ds = {
+        'features': features,
+        'labels': labels,
         'x_train': x_train,
         'x_test': x_test,
         'x_val': x_val,
@@ -144,11 +151,14 @@ def split_train_val_test(df: pd.DataFrame) -> dict:
     return ml_ds
 
 
-def get_db_tables(db_conn):
+def get_db_tables(db_conn: sqlite3.Connection) -> pd.DataFrame:
     '''Load the tables in the sqlite database.
 
     Parameters:
         db_conn: The sqlite3 connection to the database.
+
+    Returns:
+        A df with the tables in the database.
     '''
     query = '''
     select
@@ -162,19 +172,48 @@ def get_db_tables(db_conn):
     return df
 
 
-def create_datasets(db_conn):
+def create_datasets(db_conn: sqlite3.Connection) -> dict:
+    '''This loads the data sets from the sqlite database.
+
+    Parameters:
+        db_conn: The connection to the sqlite database.
+
+    Returns:
+        A dictionary of dfs.
+    '''
     df = sns.load_dataset('titanic')
-    pass_vars = ['age_group', 'sibsp', 'parch']
-    show_relationships(df.copy(), pass_vars)
+    # pass_vars = ['age_group', 'sibsp', 'parch']
+    # show_relationships(df.copy(), pass_vars)
     df = prep_for_ml(df.copy())
     ml_ds = split_train_val_test(df.copy())
     for table_name, df in ml_ds.items():
-        df.to_sql(con=db_conn, name=table_name, index=False, exists='replace')
+        df.to_sql(con=db_conn, name=table_name, index=False,
+                  if_exists='replace')
 
     return ml_ds
 
 
-def load_datasets(db_conn, exp_tables):
+def load_datasets(db_conn: sqlite3.Connection) -> dict:
+    '''This loads the titanic datasets.
+
+    Parameters:
+        db_conn: The connection to the sqlite database.
+
+    Returns:
+        A dictionary of the loaded dfs.
+    '''
+    # The ml datasets.
+    exp_tables = ['features', 'lables', 'x_train', 'x_test', 'x_val',
+                  'y_train', 'y_test', 'y_val']
+    df = get_db_tables(db_conn)
+    db_tables = df.name.unique().tolist()
+    db_tables.sort()
+    exp_tables.sort()
+    if not db_tables == exp_tables:
+        ml_ds = create_datasets(db_conn)
+    else:
+        ml_ds = load_datasets(db_conn, exp_tables)
+
     ml_ds = {}
     for table in exp_tables:
         query = f"select * from {table}"
@@ -183,24 +222,45 @@ def load_datasets(db_conn, exp_tables):
     return ml_ds
 
 
+def print_results(results: dict):
+    '''Print the results of ml fit.
+
+    Paramters:
+        results: The results of the ml fit.
+    '''
+    print(f'Best params: {results.best_params_}\n')
+    means = results.cv_results_['mean_test_score']
+    stds = results.cv_results_['std_test_score']
+    for mean, std, params in zip(means, stds, results.cv_results_['params']):
+        mean = round(mean, 3)
+        std = round(std * 2, 3)
+        print(f'{mean} (+/- {std}) for {params}')
+
+
+def get_logistic_estimator(ml_ds: dict):
+    '''Runs the logistic regression and fit.
+
+    Parameters:
+        ml_ds: The data dict.
+    '''
+    lr = LogisticRegression()
+    parameters = {'C': [0.001, 0.01, 0.1, 1, 10, 100, 1000]}
+    cv = GridSearchCV(estimator=lr, param_grid=parameters, cv=5)
+    cv.fit(ml_ds['features'], ml_ds['labels'])
+    print_results(cv)
+    print(cv.best_estimator_)
+
+
 def main():
     '''The titanic machine learning problem. '''
     pd.set_option('display.max_columns', None)
 
-    # The ml datasets.
-    exp_tables = ['x_train', 'x_test', 'x_val', 'y_train', 'y_test', 'y_val']
-
     run_dir = Path(os.path.dirname(os.path.realpath(__file__)))
     db_fn = run_dir.joinpath('titanic.db')
     with sqlite3.connect(db_fn) as db_conn:
-        df = get_db_tables(db_conn)
-        db_tables = df.name.unique().tolist()
-        if not db_tables.sort() == exp_tables.sort():
-            ml_ds = create_datasets(db_conn)
-        else:
-            ml_ds = load_datasets(db_conn, exp_tables)
+        ml_ds = load_datasets(db_conn)
 
-
+    get_logistic_estimator(ml_ds)
 
 
 if __name__ == "__main__":
