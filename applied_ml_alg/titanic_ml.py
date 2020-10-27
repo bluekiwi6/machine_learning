@@ -1,225 +1,22 @@
 import joblib
-import matplotlib.pyplot as plt
+import logging
+import logging.config
 import os
-from pathlib import Path
-import seaborn as sns
-import sqlite3
-from sklearn.linear_model import LogisticRegression
-from sklearn.model_selection import train_test_split
-from sklearn.model_selection import GridSearchCV
 import pandas as pd
+from pathlib import Path
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.linear_model import LogisticRegression
+from sklearn.neural_network import MLPClassifier
+from sklearn.model_selection import GridSearchCV
+from sklearn.svm import SVC
 import warnings
+import yaml
 
-warnings.filterwarnings('ignore', category=FutureWarning)
+from load_data import load_titanic_data
+
 warnings.filterwarnings('ignore', category=DeprecationWarning)
-
-
-def get_age_group_counts(df: pd.DataFrame) -> pd.DataFrame:
-    '''Group passenger data by age.
-
-    Parameters:
-        df: A df of the titanic passenger data.
-    '''
-    df = (
-        df
-        .assign(age_group=-10)
-        .fillna({'age': -10})
-        .astype({'age': 'int32'})
-    )
-    age_groups = range(10, df.age.max() + 10, 10)
-    full = df.query("age == -10")
-    df = df.query("age != -10")
-    for max_age in age_groups:
-        tf = (
-            df
-            .query(f'age <= {max_age}')
-            .assign(age_group=max_age)
-        )
-        full = full.append(tf, sort=False)
-        df = df.query(f'age > {max_age}')
-
-    full = (
-        full
-        .reset_index(drop=True)
-        .sort_values(by=['age_group'])
-    )
-    return full
-
-
-def show_relationships(df: pd.DataFrame, pass_vars: list):
-    '''Show if variable is correlated with survival.
-
-    Parameters:
-        df: The titanic passenger df.
-        pass_vars: The passenger variables to plot survival relationships for.
-    '''
-    titles = {
-        'age_group': 'Passenger Age Group Compared to Survival',
-        'sibsp': 'Number of Siblings or Spouses Compared to Survival',
-        'parch': 'Number of Parents and Children Compared to Survival',
-    }
-    for i, pass_var in enumerate(pass_vars):
-        tf = df
-        if pass_var == 'age_group':
-            tf = get_age_group_counts(df.copy())
-
-        sns.catplot(x=pass_var, y='survived', data=tf, kind='point', aspect=2)
-        plt.suptitle(titles[pass_var])
-
-    plt.show()
-
-
-def fill_missing_age(df: pd.DataFrame) -> pd.DataFrame:
-    '''Fill in missing ages based on sex and passenger class.
-
-    Parameters:
-        df: The passenger df.
-
-    Returns:
-        The passenger df with the missing ages assigned.
-    '''
-    df = df.fillna({'age': 0})
-    tf = (
-        df
-        .query("age > 0")
-        .reset_index(drop=True)
-        .filter(['sex', 'pclass', 'age'])
-        .groupby(by=['sex', 'pclass'], as_index=False)
-        .median()
-        .rename({'age': 'median_age'}, axis=1)
-    )
-    df = df.merge(tf, on=['sex', 'pclass'], how='left')
-    df.loc[df.age == 0, 'age'] = df.median_age
-    df = df.drop(labels=['median_age'], axis=1)
-    return df
-
-
-def prep_for_ml(df: pd.DataFrame) -> pd.DataFrame:
-    '''Combine and remove features for training the machine learning algorithm.
-
-    Parameters:
-        df: The titanic passenger df.
-
-    Returns:
-        The ml prepped df.
-    '''
-    df = fill_missing_age(df.copy())
-    df['deck'] = df.deck.cat.add_categories(new_categories=['U'])
-    df = (
-        df
-        .fillna({'deck': 'U'})
-        .replace({
-            'sex': {'male': 0, 'female': 1},
-        })
-        .assign(
-            family_count=df.sibsp + df.parch
-        )
-        .filter(['survived', 'pclass', 'sex', 'age', 'family_count', 'fare'])
-    )
-    return df
-
-
-def split_train_val_test(df: pd.DataFrame) -> dict:
-    '''Split df for machine learning modeling.
-
-    Parameters:
-        df: The titanic passenger df.
-
-    Returns:
-        A dict with the split datasets.
-    '''
-    features = df.drop('survived', axis=1)
-    labels = df.survived
-    # First split the data into a 60% training set.
-    x_train, x_test, y_train, y_test = train_test_split(
-        features, labels, test_size=0.4, random_state=42)
-
-    # Then split the 40% chunk in half so you end up with 60% training, 20%
-    # validation and 20% testting.
-    x_val, x_test, y_val, y_test = train_test_split(
-        x_test, y_test, test_size=0.5, random_state=42)
-    ml_ds = {
-        'features': features,
-        'labels': labels,
-        'x_train': x_train,
-        'x_test': x_test,
-        'x_val': x_val,
-        'y_train': y_train,
-        'y_test': y_test,
-        'y_val': y_val,
-    }
-    return ml_ds
-
-
-def get_db_tables(db_conn: sqlite3.Connection) -> pd.DataFrame:
-    '''Load the tables in the sqlite database.
-
-    Parameters:
-        db_conn: The sqlite3 connection to the database.
-
-    Returns:
-        A df with the tables in the database.
-    '''
-    query = '''
-    select
-        type,
-        name
-    from sqlite_master
-    where 1=1
-        and type = 'table'
-    '''
-    df = pd.read_sql(query, db_conn)
-    return df
-
-
-def create_datasets(db_conn: sqlite3.Connection) -> dict:
-    '''This loads the data sets from the sqlite database.
-
-    Parameters:
-        db_conn: The connection to the sqlite database.
-
-    Returns:
-        A dictionary of dfs.
-    '''
-    df = sns.load_dataset('titanic')
-    # pass_vars = ['age_group', 'sibsp', 'parch']
-    # show_relationships(df.copy(), pass_vars)
-    df = prep_for_ml(df.copy())
-    ml_ds = split_train_val_test(df.copy())
-    for table_name, df in ml_ds.items():
-        df.to_sql(con=db_conn, name=table_name, index=False,
-                  if_exists='replace')
-
-    return ml_ds
-
-
-def load_datasets(db_conn: sqlite3.Connection) -> dict:
-    '''This loads the titanic datasets.
-
-    Parameters:
-        db_conn: The connection to the sqlite database.
-
-    Returns:
-        A dictionary of the loaded dfs.
-    '''
-    # The ml datasets.
-    exp_tables = ['features', 'lables', 'x_train', 'x_test', 'x_val',
-                  'y_train', 'y_test', 'y_val']
-    df = get_db_tables(db_conn)
-    db_tables = df.name.unique().tolist()
-    db_tables.sort()
-    exp_tables.sort()
-    if not db_tables == exp_tables:
-        ml_ds = create_datasets(db_conn)
-    else:
-        ml_ds = load_datasets(db_conn, exp_tables)
-
-    ml_ds = {}
-    for table in exp_tables:
-        query = f"select * from {table}"
-        ml_ds[table] = pd.read_sql(query, db_conn)
-
-    return ml_ds
+warnings.filterwarnings('ignore', category=FutureWarning)
 
 
 def print_results(results: dict):
@@ -237,31 +34,201 @@ def print_results(results: dict):
         print(f'{mean} (+/- {std}) for {params}')
 
 
-def get_logistic_estimator(ml_ds: dict):
+def run_logistic_regression(ml_ds: dict) -> object:
     '''Runs the logistic regression and fit.
+
+    When to use it:
+    - Bianry target variable.
+    - Transparency is important or interested in significance of predictors.
+    - Fairly well behaved data (not too many outliers or missing values).
+    - Need a quick initial benchmark.
+
+    When not to use it:
+    - Continuous target variable.
+    - Massive data (rows or columns).
+    - Unwildy data (outliers, missing values, skewed features or complex
+        relationshiops).
+    - Performance is the only thing that matters.
 
     Parameters:
         ml_ds: The data dict.
+
+    Returns:
+        cv object.
     '''
+    LOGGER.info('Running logistic regression.')
     lr = LogisticRegression()
     parameters = {'C': [0.001, 0.01, 0.1, 1, 10, 100, 1000]}
+    # cv is a cross validatiion generator
     cv = GridSearchCV(estimator=lr, param_grid=parameters, cv=5)
     cv.fit(ml_ds['features'], ml_ds['labels'])
     print_results(cv)
     print(cv.best_estimator_)
+    return cv
+
+
+def run_svm(ml_ds: dict) -> object:
+    '''A support vector machine (svm) is a classifier that fines an optimal
+    boundary between two groups of data points. It is a line midway between the
+    groups.
+
+    When to use it?
+    - Bianary target variable.
+    - Feature to row ratio is very high.
+    - Very complex relationships.
+    - Lots of outliers.
+
+    When not to use it?
+    - Feature to row ratio is very low.
+    - Tranparency is important or interested in significance of predictors.
+    - Looking for a quick benchmark model.
+
+    Parameters:
+        ml_ds: The data dict.
+
+    Returns:
+        cv object.
+    '''
+    LOGGER.info('Running support vector machine (svm).')
+    svc = SVC()
+    # rbf - radial basis kernel; this determines the relationship between
+    # points in infinite dimensions to ultimately group them together.
+    parameters = {
+        'kernel': ['linear', 'rbf'],
+        'C': [0.1, 1, 10],
+    }
+    cv = GridSearchCV(estimator=svc, param_grid=parameters, cv=5)
+    cv.fit(ml_ds['features'], ml_ds['labels'])
+    print_results(cv)
+    return cv
+
+
+def run_mlp(ml_ds: dict) -> object:
+    '''Multilayer perceptron is a classic feed-forward artificial neural
+    network, the core component of deep learning. A connected series of nodes
+    (in the form of a directed acyclic graph), where each node represents a
+    function or a model.
+
+    When to use it?
+    - Categorical or continuous target variable.
+    - Very complex relationships or performance is the only thing that matters.
+    - When control over the training process is very important.
+
+    When not to use it?
+    - Image recognition, time series, etc.
+    - Tranparency is important or interested in significance of predictors.
+    - Need a quick benchmark model.
+    - Limited data available.
+
+    Parameters:
+        ml_ds: The data dict.
+
+    Returns:
+        cv object.
+    '''
+    LOGGER.info('Running multilayer perceptron.')
+    parameters = {}
+    # Hidden layer-size hyperparameter determines how many hidden layers there
+    # will be an dhow many nodes in each layer. Using 1 hidden layer because it
+    # is a simple problem. (nodes, layers)
+    parameters['hidden_layer_sizes'] = [(10, 1),  (50, 1), (100, 1)]
+
+    # Activation function hyperparameter dictates the type of nonlinearity that
+    # is introduced to the model: sigmoid, TanH (hyperbolic tangent), ReLU
+    # (Rectified linear unit - sets all negative numbers to 0).
+    parameters['activation'] = ['relu', 'tanh', 'logistic']
+
+    # Learning rate hyperparameter facilitates both how quickly and whether or
+    # not the algorithm will find the optimal solution.
+    # Constant - keep rate the same during learning process.
+    # Invscaling - gradually decrease learning rate at each step.
+    # Adaptive - keep the rate constant as long as the training loss keeps
+    #   decreasing. If the learning rate stops going down, then it'll decrease
+    #   the learning rate so it takes smaller steps.
+    parameters['learning_rate'] = ['constant', 'invscaling', 'adaptive']
+
+    mlp = MLPClassifier()
+    cv = GridSearchCV(estimator=mlp, param_grid=parameters, cv=5)
+    cv.fit(ml_ds['features'], ml_ds['labels'])
+    print_results(cv)
+    return cv
+
+
+def run_random_forest(ml_ds: dict) -> object:
+    '''Random forest merges a collection of independent decision trees to get a
+    more accurate and stable prediction. It is a type of ensemble method, which
+    combines several machine learning models in order to decrease both bias and
+    variance.
+
+    When to use it?
+    - Categorical or continuous target variable.
+    - Interested in significance of predictors.
+    - Need a quick benchmark model.
+    - If you have messy data, such as missing values, outliers.
+
+    When not to use it?
+    - If you're solving a very complex, novel problem.
+    - Transparency is important.
+    - Prediction time is important.
+
+    Parameters:
+        ml_ds: The data dict.
+
+    Returns:
+        cv object.
+    '''
+    LOGGER.info('Running random forest.')
+    parameters = {}
+    # N estimators hyperparameter controls how many individual decision trees
+    # will be built. Width of trees.
+    parameters['n_estimators'] = [5, 50, 250]
+
+    # Max depth hyperparameter controls how deep each individual decision tree
+    # can go. If this was too high, you would get a tree that has a node for
+    # every example in the training set. Depth of trees.
+    parameters['max_depth'] = [2, 4, 8, 16, 32, None]
+    # cv is a cross validatiion generator
+    rf = RandomForestClassifier()
+    cv = GridSearchCV(estimator=rf, param_grid=parameters, cv=5)
+    cv.fit(ml_ds['features'], ml_ds['labels'])
+    print_results(cv)
+    print(cv.best_estimator_)
+    return cv
 
 
 def main():
     '''The titanic machine learning problem. '''
     pd.set_option('display.max_columns', None)
+    run_dir = Path(RUN_PATH)
+    ml_ds = load_titanic_data(run_dir)
 
-    run_dir = Path(os.path.dirname(os.path.realpath(__file__)))
-    db_fn = run_dir.joinpath('titanic.db')
-    with sqlite3.connect(db_fn) as db_conn:
-        ml_ds = load_datasets(db_conn)
+    model_fn = run_dir.joinpath('outputs', 'lr_model.pkl')
+    if not model_fn.exists():
+        cv = run_logistic_regression(ml_ds)
+        joblib.dump(cv.best_estimator_, model_fn)
 
-    get_logistic_estimator(ml_ds)
+    model_fn = run_dir.joinpath('outputs', 'svm_model.pkl')
+    if not model_fn.exists():
+        cv = run_svm(ml_ds)
+        joblib.dump(cv.best_estimator_, model_fn)
+
+    model_fn = run_dir.joinpath('outputs', 'mlp_model.pkl')
+    if not model_fn.exists():
+        cv = run_mlp(ml_ds)
+        joblib.dump(cv.best_estimator_, model_fn)
+
+    model_fn = run_dir.joinpath('outputs', 'rf_model.pkl')
+    if not model_fn.exists():
+        cv = run_random_forest(ml_ds)
+        joblib.dump(cv.best_estimator_, model_fn)
 
 
 if __name__ == "__main__":
+    RUN_PATH = os.path.dirname(os.path.realpath(__file__))
+    LOG_CONFIG = os.path.join(RUN_PATH, 'log_config.yaml')
+    with open(LOG_CONFIG, 'r') as log_file:
+        logging.config.dictConfig(yaml.safe_load(log_file.read()))
+
+    LOGGER = logging.getLogger(__name__)
     main()
+    logging.shutdown()

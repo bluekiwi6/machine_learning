@@ -6,3 +6,4 @@ verify_ssl = true
 [packages]
 ipython = "*"
 pandas = "~=1.0"
+pyyaml = "~=5.0"
