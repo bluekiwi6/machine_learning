@@ -4,6 +4,8 @@ import logging.config
 import os
 import pandas as pd
 from pathlib import Path
+from sklearn.ensemble import GradientBoostingClassifier
+from sklearn.ensemble import GradientBoostingRegressor
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.linear_model import LogisticRegression
@@ -196,6 +198,55 @@ def run_random_forest(ml_ds: dict) -> object:
     return cv
 
 
+def run_boosting(ml_ds: dict) -> object:
+    '''Boosting is an ensemble method that aggregates a number of weak models
+    to create one strong model. A weak model is one that is only slightly
+    better than random guessing. A strong model is one that is strongly
+    correlated with the true classification. Boosting effectively learns from
+    its mistakes with each iteration.
+
+    This is gradient boosted trees.
+
+    When to use it?
+    - Categorical or continuous target variable.
+    - Useful on nearly any type of problem.
+    - Interested in significance of predictors.
+    - Prediction time is important.
+
+    When not to use it?
+    - Transparency is important.
+    - Training time is important or compute power is limited.
+    - Data is really noisy.
+
+    Parameters:
+        ml_ds: The data dict.
+
+    Returns:
+        cv object.
+    '''
+    LOGGER.info('Running boosting.')
+    parameters = {}
+    # N estimators hyperparameter controls how many individual decision trees
+    # will be built. Width of trees.
+    parameters['n_estimators'] = [5, 50, 250, 500]
+
+    # Max depth hyperparameter controls how deep each individual decision tree
+    # can go. If this was too high, you would get a tree that has a node for
+    # every example in the training set. Depth of trees.
+    parameters['max_depth'] = [1, 3, 5, 7, 9]
+
+    # Learning rate hyperparameter facilitates both how quickly and whether or
+    # not the algorithm will find the optimal solution.
+    parameters['learning_rate'] = [0.01, 0.1, 1, 10, 100]
+
+    gb = GradientBoostingClassifier()
+    cv = GridSearchCV(estimator=gb, param_grid=parameters, cv=5)
+    cv.fit(ml_ds['features'], ml_ds['labels'])
+    print_results(cv)
+    print(cv.best_estimator_)
+    return cv
+
+
 def main():
     '''The titanic machine learning problem. '''
     pd.set_option('display.max_columns', None)
@@ -220,6 +271,11 @@ def main():
     model_fn = run_dir.joinpath('outputs', 'rf_model.pkl')
     if not model_fn.exists():
         cv = run_random_forest(ml_ds)
+        joblib.dump(cv.best_estimator_, model_fn)
+
+    model_fn = run_dir.joinpath('outputs', 'gb_model.pkl')
+    if not model_fn.exists():
+        cv = run_boosting(ml_ds)
         joblib.dump(cv.best_estimator_, model_fn)
 
 
