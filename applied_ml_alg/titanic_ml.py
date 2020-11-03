@@ -65,7 +65,7 @@ def run_logistic_regression(ml_ds: dict) -> object:
     parameters = {"C": [0.001, 0.01, 0.1, 1, 10, 100, 1000]}
     # cv is a cross validatiion generator
     cv = GridSearchCV(estimator=lr, param_grid=parameters, cv=5)
-    cv.fit(ml_ds["features"], ml_ds["labels"])
+    cv.fit(ml_ds["train_features"], ml_ds["train_labels"])
     print_results(cv)
     print(cv.best_estimator_)
     return cv
@@ -102,7 +102,7 @@ def run_svm(ml_ds: dict) -> object:
         "C": [0.1, 1, 10],
     }
     cv = GridSearchCV(estimator=svc, param_grid=parameters, cv=5)
-    cv.fit(ml_ds["features"], ml_ds["labels"])
+    cv.fit(ml_ds["train_features"], ml_ds["train_labels"])
     print_results(cv)
     return cv
 
@@ -153,7 +153,7 @@ def run_mlp(ml_ds: dict) -> object:
 
     mlp = MLPClassifier()
     cv = GridSearchCV(estimator=mlp, param_grid=parameters, cv=5)
-    cv.fit(ml_ds["features"], ml_ds["labels"])
+    cv.fit(ml_ds["train_features"], ml_ds["train_labels"])
     print_results(cv)
     return cv
 
@@ -194,7 +194,7 @@ def run_random_forest(ml_ds: dict) -> object:
     # cv is a cross validatiion generator
     rf = RandomForestClassifier()
     cv = GridSearchCV(estimator=rf, param_grid=parameters, cv=5)
-    cv.fit(ml_ds["features"], ml_ds["labels"])
+    cv.fit(ml_ds["train_features"], ml_ds["train_labels"])
     print_results(cv)
     print(cv.best_estimator_)
     return cv
@@ -243,7 +243,7 @@ def run_boosting(ml_ds: dict) -> object:
 
     gb = GradientBoostingClassifier()
     cv = GridSearchCV(estimator=gb, param_grid=parameters, cv=5)
-    cv.fit(ml_ds["features"], ml_ds["labels"])
+    cv.fit(ml_ds["train_features"], ml_ds["train_labels"])
     print_results(cv)
     print(cv.best_estimator_)
     return cv
@@ -256,6 +256,7 @@ def run_models(run_dir: object, ml_ds: dict):
         run_dir: The path to the run directory.
         ml_ds: The data dict.
     """
+    LOGGER.info("Checking if models were run.")
     model_fn = run_dir.joinpath("outputs", "lr_model.pkl")
     if not model_fn.exists():
         cv = run_logistic_regression(ml_ds)
@@ -282,19 +283,60 @@ def run_models(run_dir: object, ml_ds: dict):
         joblib.dump(cv.best_estimator_, model_fn)
 
 
-def read_models(run_dir: object):
+def read_models(run_dir: object) -> dict:
     """Read saved models.
 
     Parameters:
         run_dir: The path to the run directory.
+
+    Returns:
+        A dictionary with all the loaded models.
     """
+    LOGGER.info("Reading pickled models.")
     models = {}
     saved_models = ("lr", "svm", "mlp", "rf", "gb")
     for model in saved_models:
-        filename = run_dir.joinpath(f"{model}_model.pkl")
+        filename = run_dir.joinpath("outputs", f"{model}_model.pkl")
         models[model] = joblib.load(filename)
 
-    return
+    return models
+
+
+def evaluate_model(
+    name: str, model: object, features: pd.DataFrame, labels: pd.DataFrame
+):
+    """Models are evaluated on the following:
+    accuracy = number predicted correctly / total number of examples
+    precision = number predicted as surviving that actually survived /
+        total number predicted to survive
+    recall = number predicted as surviving that actually survived /
+        total number that actually survived
+
+    Parameters:
+        name: The model name.
+        model: The model object.
+        features: The features df.
+        labels: The labels df.
+    """
+    start = time()
+    pred = model.predict(features)
+    end = time()
+    accuracy = round(accuracy_score(labels, pred), 3)
+    precision = round(precision_score(labels, pred), 3)
+    recall = round(recall_score(labels, pred), 3)
+    latency = round((end - start) * 1000, 1)
+    space = " " * (3 - len(name))
+    ms_space = "  "
+    if latency >= 100:
+        ms_space = ""
+    elif latency >= 10:
+        ms_space = " "
+
+    print(
+        f"{name.upper()} {space} -- Accuracy: {accuracy:0.3f} / "
+        f"Precision: {precision:0.3f} / Recall: {recall:0.3f} / "
+        f"Latency: {ms_space}{latency}ms"
+    )
 
 
 def main():
@@ -303,7 +345,15 @@ def main():
     run_dir = Path(RUN_PATH)
     ml_ds = load_titanic_data(run_dir)
     run_models(run_dir, ml_ds)
-    read_models(run_dir)
+    models = read_models(run_dir)
+
+    for name, model in models.items():
+        evaluate_model(name, model, ml_ds["val_features"], ml_ds["val_labels"])
+
+    print(ml_ds.keys())
+    evaluate_model(
+        "Random Forest", models["rf"], ml_ds["test_features"], ml_ds["test_labels"]
+    )
 
 
 if __name__ == "__main__":
