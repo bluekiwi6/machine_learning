@@ -350,7 +350,6 @@ def main():
     for name, model in models.items():
         evaluate_model(name, model, ml_ds["val_features"], ml_ds["val_labels"])
 
-    print(ml_ds.keys())
     evaluate_model(
         "Random Forest", models["rf"], ml_ds["test_features"], ml_ds["test_labels"]
     )
