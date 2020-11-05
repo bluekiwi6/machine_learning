@@ -1,3 +1,4 @@
+"""Titanic ML."""
 import joblib
 import logging
 import logging.config
