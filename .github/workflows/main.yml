@@ -25,6 +25,9 @@ jobs:
       # Lint code
       - name: lint
         run: |
+          pip install pydocstyle
+          pip install flake8
+          pip install black
           python -m pydocstyle --convention=google
           python -m flake8
           python -m black
