@@ -39,7 +39,7 @@ def print_results(results: dict):
 
 
 def run_logistic_regression(ml_ds: dict) -> object:
-    """Runs the logistic regression and fit.
+    """Run the logistic regression model.
 
     When to use it:
     - Bianry target variable.
@@ -54,7 +54,7 @@ def run_logistic_regression(ml_ds: dict) -> object:
         relationshiops).
     - Performance is the only thing that matters.
 
-    Parameters:
+    Args:
         ml_ds: The data dict.
 
     Returns:
@@ -72,7 +72,9 @@ def run_logistic_regression(ml_ds: dict) -> object:
 
 
 def run_svm(ml_ds: dict) -> object:
-    """A support vector machine (svm) is a classifier that fines an optimal
+    """Run support vector machine model.
+
+    A support vector machine (svm) is a classifier that fines an optimal
     boundary between two groups of data points. It is a line midway between the
     groups.
 
@@ -87,7 +89,7 @@ def run_svm(ml_ds: dict) -> object:
     - Tranparency is important or interested in significance of predictors.
     - Looking for a quick benchmark model.
 
-    Parameters:
+    Args:
         ml_ds: The data dict.
 
     Returns:
@@ -108,7 +110,9 @@ def run_svm(ml_ds: dict) -> object:
 
 
 def run_mlp(ml_ds: dict) -> object:
-    """Multilayer perceptron is a classic feed-forward artificial neural
+    """Run multilayer perceptron model.
+
+    Multilayer perceptron is a classic feed-forward artificial neural
     network, the core component of deep learning. A connected series of nodes
     (in the form of a directed acyclic graph), where each node represents a
     function or a model.
@@ -124,7 +128,7 @@ def run_mlp(ml_ds: dict) -> object:
     - Need a quick benchmark model.
     - Limited data available.
 
-    Parameters:
+    Args:
         ml_ds: The data dict.
 
     Returns:
@@ -159,7 +163,9 @@ def run_mlp(ml_ds: dict) -> object:
 
 
 def run_random_forest(ml_ds: dict) -> object:
-    """Random forest merges a collection of independent decision trees to get a
+    """Run random forest model.
+
+    Random forest merges a collection of independent decision trees to get a
     more accurate and stable prediction. It is a type of ensemble method, which
     combines several machine learning models in order to decrease both bias and
     variance.
@@ -175,7 +181,7 @@ def run_random_forest(ml_ds: dict) -> object:
     - Transparency is important.
     - Prediction time is important.
 
-    Parameters:
+    Args:
         ml_ds: The data dict.
 
     Returns:
@@ -201,7 +207,9 @@ def run_random_forest(ml_ds: dict) -> object:
 
 
 def run_boosting(ml_ds: dict) -> object:
-    """Boosting is an ensemble method that aggregates a number of weak models
+    """Run boosting model.
+
+    Boosting is an ensemble method that aggregates a number of weak models
     to create one strong model. A weak model is one that is only slightly
     better than random guessing. A strong model is one that is strongly
     correlated with the true classification. Boosting effectively learns from
@@ -220,7 +228,7 @@ def run_boosting(ml_ds: dict) -> object:
     - Training time is important or compute power is limited.
     - Data is really noisy.
 
-    Parameters:
+    Args:
         ml_ds: The data dict.
 
     Returns:
@@ -252,7 +260,7 @@ def run_boosting(ml_ds: dict) -> object:
 def run_models(run_dir: object, ml_ds: dict):
     """Run the different machine learning models and save them.
 
-    Parameters:
+    Args:
         run_dir: The path to the run directory.
         ml_ds: The data dict.
     """
@@ -286,7 +294,7 @@ def run_models(run_dir: object, ml_ds: dict):
 def read_models(run_dir: object) -> dict:
     """Read saved models.
 
-    Parameters:
+    Args:
         run_dir: The path to the run directory.
 
     Returns:
@@ -305,14 +313,16 @@ def read_models(run_dir: object) -> dict:
 def evaluate_model(
     name: str, model: object, features: pd.DataFrame, labels: pd.DataFrame
 ):
-    """Models are evaluated on the following:
+    """Compare models on validation sets.
+
+    Models are evaluated on the following:
     accuracy = number predicted correctly / total number of examples
     precision = number predicted as surviving that actually survived /
         total number predicted to survive
     recall = number predicted as surviving that actually survived /
         total number that actually survived
 
-    Parameters:
+    Args:
         name: The model name.
         model: The model object.
         features: The features df.
@@ -340,7 +350,7 @@ def evaluate_model(
 
 
 def main():
-    """The titanic machine learning problem. """
+    """The titanic machine learning problem."""
     pd.set_option("display.max_columns", None)
     run_dir = Path(RUN_PATH)
     ml_ds = load_titanic_data(run_dir)

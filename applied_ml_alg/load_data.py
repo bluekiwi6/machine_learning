@@ -1,3 +1,4 @@
+"""Load titanic data."""
 import logging
 import matplotlib.pyplot as plt
 import os
@@ -18,8 +19,11 @@ warnings.filterwarnings("ignore", category=DeprecationWarning)
 def _get_age_group_counts(df: pd.DataFrame) -> pd.DataFrame:
     """Group passenger data by age.
 
-    Parameters:
+    Args:
         df: A df of the titanic passenger data.
+
+    Returns:
+        A df with the grouped counts.
     """
     LOGGER.info("Grouping passenger age counts.")
     df = df.assign(age_group=-10).fillna({"age": -10}).astype({"age": "int32"})
@@ -35,10 +39,10 @@ def _get_age_group_counts(df: pd.DataFrame) -> pd.DataFrame:
     return full
 
 
-def _show_relationships(df: pd.DataFrame, pass_vars: list):
+def _show_relationships(df: pd.DataFrame, pass_vars: list) -> None:
     """Show if variable is correlated with survival.
 
-    Parameters:
+    Args:
         df: The titanic passenger df.
         pass_vars: The passenger variables to plot survival relationships for.
     """
@@ -62,7 +66,7 @@ def _show_relationships(df: pd.DataFrame, pass_vars: list):
 def _fill_missing_age(df: pd.DataFrame) -> pd.DataFrame:
     """Fill in missing ages based on sex and passenger class.
 
-    Parameters:
+    Args:
         df: The passenger df.
 
     Returns:
@@ -87,7 +91,7 @@ def _fill_missing_age(df: pd.DataFrame) -> pd.DataFrame:
 def _prep_for_ml(df: pd.DataFrame) -> pd.DataFrame:
     """Combine and remove features for training the machine learning algorithm.
 
-    Parameters:
+    Args:
         df: The titanic passenger df.
 
     Returns:
@@ -106,7 +110,7 @@ def _prep_for_ml(df: pd.DataFrame) -> pd.DataFrame:
 def _split_train_val_test(df: pd.DataFrame) -> dict:
     """Split df for machine learning modeling.
 
-    Parameters:
+    Args:
         df: The titanic passenger df.
 
     Returns:
@@ -141,7 +145,7 @@ def _split_train_val_test(df: pd.DataFrame) -> dict:
 def _get_db_tables(db_conn: sqlite3.Connection) -> pd.DataFrame:
     """Load the tables in the sqlite database.
 
-    Parameters:
+    Args:
         db_conn: The sqlite3 connection to the database.
 
     Returns:
@@ -163,7 +167,7 @@ def _get_db_tables(db_conn: sqlite3.Connection) -> pd.DataFrame:
 def _create_datasets(db_conn: sqlite3.Connection) -> dict:
     """This loads the data sets from the sqlite database.
 
-    Parameters:
+    Args:
         db_conn: The connection to the sqlite database.
 
     Returns:
@@ -184,7 +188,7 @@ def _create_datasets(db_conn: sqlite3.Connection) -> dict:
 def _load_datasets(db_conn: sqlite3.Connection) -> dict:
     """This loads the titanic datasets.
 
-    Parameters:
+    Args:
         db_conn: The connection to the sqlite database.
 
     Returns:
@@ -217,11 +221,14 @@ def _load_datasets(db_conn: sqlite3.Connection) -> dict:
     return ml_ds
 
 
-def load_titanic_data(run_dir: Path):
+def load_titanic_data(run_dir: Path) -> dict:
     """Load titanic dataset and set up for modelling.
 
-    Parameters:
+    Args:
         run_dir: The path to the run dir.
+
+    Returns:
+        A dictionary of the titanic data sets.
     """
     run_dir = Path(RUN_PATH)
     db_fn = run_dir.joinpath("db", "titanic.db")
