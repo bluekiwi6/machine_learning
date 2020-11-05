@@ -30,9 +30,6 @@ jobs:
       - name: lint
         run: |
           python --version
-          pip install pydocstyle
-          pip install flake8
-          python -m pip install black
-          python -m pydocstyle --convention=google
-          python -m flake8
-          python -m black
+          pip install pre-commit
+          pre-commit install
+          pre-commit run --all-files
