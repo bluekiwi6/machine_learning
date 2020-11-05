@@ -25,4 +25,6 @@ jobs:
       # Lint code
       - name: lint
         run: |
-          pre-commit run --all-files
+          python -m pydocstyle --convention=google
+          python -m flake8
+          python -m black
